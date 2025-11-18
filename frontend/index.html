@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Simple Wallet UI</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h2>Simple Wallet (School Project)</h2>
+ 
+
+  <div class="box" id="auth">
+    <h3>Register / Login</h3>
+    <input id="username" placeholder="username" /><br/>
+    <input id="password" placeholder="password" type="password" /><br/>
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <div id="authResult"></div>
+  </div>
+
+  <div class="box" id="account" style="display:none">
+    <h3>Your Account</h3>
+    <div id="accountInfo"></div>
+    <h4>Top-up</h4>
+    <input id="topupAmount" placeholder="amount in cents (e.g., 1000 = 10.00)" /><button onclick="topup()">Top-up</button>
+    <h4>Transfer</h4>
+    <input id="toAccount" placeholder="destination account id" /><br/>
+    <input id="transferAmount" placeholder="amount in cents" /><button onclick="transfer()">Transfer</button>
+    <h4>Ledger</h4>
+    <button onclick="loadLedger()">Load Ledger</button>
+    <pre id="ledger"></pre>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000';
+
+    function setAuth(token) {
+      localStorage.setItem('jwt', token);
+      document.getElementById('auth').style.display = 'none';
+      document.getElementById('account').style.display = 'block';
+    }
+
+    async function register() {
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      const r = await fetch(API_BASE + '/auth/register', { method:'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ username:u, password:p })});
+      const j = await r.json();
+      document.getElementById('authResult').innerText = JSON.stringify(j);
+    }
+
+    async function login() {
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      const r = await fetch(API_BASE + '/auth/login', { method:'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ username:u, password:p })});
+      const j = await r.json();
+      if (j.token) {
+        setAuth(j.token);
+      } else {
+        document.getElementById('authResult').innerText = JSON.stringify(j);
+      }
+    }
+
+    async function topup() {
+      const a = Number(document.getElementById('topupAmount').value);
+      const token = localStorage.getItem('jwt');
+      const r = await fetch(API_BASE + '/wallet/topup', { method:'POST', headers: {'content-type':'application/json', 'authorization':'Bearer ' + token}, body: JSON.stringify({ amount: a }) });
+      const j = await r.json();
+      document.getElementById('accountInfo').innerText = JSON.stringify(j);
+    }
+
+    async function transfer() {
+      const to = Number(document.getElementById('toAccount').value);
+      const amt = Number(document.getElementById('transferAmount').value);
+      const token = localStorage.getItem('jwt');
+      const r = await fetch(API_BASE + '/wallet/transfer', { method:'POST', headers: {'content-type':'application/json', 'authorization':'Bearer ' + token}, body: JSON.stringify({ to_account_id: to, amount: amt }) });
+      const j = await r.json();
+      document.getElementById('accountInfo').innerText = JSON.stringify(j);
+    }
+
+    async function loadLedger() {
+      const token = localStorage.getItem('jwt');
+      const r = await fetch(API_BASE + '/wallet/ledger', { headers: { authorization: 'Bearer ' + token } });
+      const j = await r.json();
+      document.getElementById('ledger').innerText = JSON.stringify(j, null, 2);
+    }
+  </script>
+</body>
+</html>

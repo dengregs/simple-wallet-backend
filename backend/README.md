@@ -1,0 +1,12 @@
+Backend Notes:
+- Ports: default 3000
+- Environment variables:
+  - DATABASE_URL (postgres connection string)
+  - JWT_SECRET (secret for signing tokens)
+- Endpoints:
+  - POST /auth/register { username, password }
+  - POST /auth/login { username, password } -> { token }
+  - GET /me/account (auth)
+  - POST /wallet/topup { amount } (auth)
+  - POST /wallet/transfer { to_account_id, amount } (auth)
+  - GET /wallet/ledger (auth)
