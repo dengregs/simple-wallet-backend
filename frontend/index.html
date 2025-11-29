@@ -2,87 +2,287 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Simple Wallet UI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wallet App — Ultra GCash UI</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Small screen-specific tweaks just for these new form cards */
+    .form-wrapper {
+      max-width: 920px;
+      margin: 18px auto 60px;
+      padding: 0 18px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+    /* make single-column on smaller screens */
+    @media (max-width: 920px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    .form-card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 12px 30px var(--shadow);
+      border: 1px solid rgba(255,255,255,0.06);
+      min-height: 120px;
+    }
+
+    .form-card h2 {
+      margin: 0 0 12px 0;
+      color: var(--primary-dark);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .clean-row { display:flex; gap:12px; align-items:center; margin-top:8px; }
+    .clean-input {
+      width:100%;
+      padding:12px 14px;
+      border-radius:10px;
+      border:1px solid rgba(0,0,0,0.12);
+      background: rgba(255,255,255,0.92);
+      font-size:15px;
+      color:var(--text);
+      outline:none;
+      transition: box-shadow .15s ease, border-color .15s ease;
+    }
+    body.dark .clean-input {
+      background: rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);
+      color:#fff;
+    }
+    .clean-input:focus { box-shadow:0 6px 18px rgba(0,0,0,0.08); border-color:var(--primary); }
+
+    .wide { width:100%; display:inline-block; padding:12px 18px; border-radius:12px; font-weight:800; }
+    .muted { color:var(--muted); font-size:13px; margin-top:6px; display:block; }
+
+    /* Small helper for header area spacing */
+    .screen-header { max-width:1100px; margin: 8px auto 20px; padding: 0 18px; }
+  </style>
 </head>
 <body>
-  <h2>Simple Wallet (School Project)</h2>
- 
 
-  <div class="box" id="auth">
-    <h3>Register / Login</h3>
-    <input id="username" placeholder="username" /><br/>
-    <input id="password" placeholder="password" type="password" /><br/>
-    <button onclick="register()">Register</button>
-    <button onclick="login()">Login</button>
-    <div id="authResult"></div>
+<!-- Background gradient + animated waves -->
+<div class="bg-hero">
+  <svg class="wave wave-1" viewBox="0 0 1440 320" preserveAspectRatio="none"><path d="M0,160 C360,260 1080,60 1440,160 L1440 0 L0 0 Z"></path></svg>
+  <svg class="wave wave-2" viewBox="0 0 1440 320" preserveAspectRatio="none"><path d="M0,200 C320,120 1120,320 1440,200 L1440 0 L0 0 Z"></path></svg>
+</div>
+
+<!-- Loader -->
+<div id="loader" class="loader-overlay hidden"><div class="spinner"></div></div>
+
+<!-- Logout confirm modal -->
+<div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-panel">
+    <h3>Confirm Logout</h3>
+    <p>Are you sure you want to log out?</p>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn secondary">Cancel</button>
+      <button id="modalConfirm" class="btn danger">Logout</button>
+    </div>
+  </div>
+</div>
+
+<!-- Error stack -->
+<div id="errorStack" class="error-stack" aria-live="assertive"></div>
+
+<!-- Sidebar (desktop) -->
+<aside class="sidebar">
+  <div class="sb-top">
+    <img src="https://i.pravatar.cc/120" class="avatar" alt="avatar"/>
+    <div class="profile-name" id="profileName">User</div>
   </div>
 
-  <div class="box" id="account" style="display:none">
-    <h3>Your Account</h3>
-    <div id="accountInfo"></div>
-    <h4>Top-up</h4>
-    <input id="topupAmount" placeholder="amount in cents (e.g., 1000 = 10.00)" /><button onclick="topup()">Top-up</button>
-    <h4>Transfer</h4>
-    <input id="toAccount" placeholder="destination account id" /><br/>
-    <input id="transferAmount" placeholder="amount in cents" /><button onclick="transfer()">Transfer</button>
-    <h4>Ledger</h4>
-    <button onclick="loadLedger()">Load Ledger</button>
-    <pre id="ledger"></pre>
+  <nav class="sb-nav">
+    <button class="side-btn active" data-target="homeScreen" onclick="navTo('homeScreen')">Home</button>
+
+    <!-- Separate screens -->
+    <button class="side-btn" data-target="topupScreen" onclick="navTo('topupScreen')">Top-up</button>
+    <button class="side-btn" data-target="sendScreen" onclick="navTo('sendScreen')">Send</button>
+    <button class="side-btn" data-target="merchantScreen" onclick="navTo('merchantScreen')">Merchant</button>
+    <button class="side-btn" data-target="historySection" onclick="navTo('historySection')">Transactions</button>
+  </nav>
+
+  <div class="sb-bottom">
+    <button class="side-btn" onclick="toggleDarkMode()">Toggle Theme</button>
+    <button class="side-btn" onclick="openLogoutModal()">Logout</button>
   </div>
+</aside>
 
-  <script>
-    const API_BASE = 'http://localhost:3000';
+<!-- Main app container -->
+<main class="app-shell">
 
-    function setAuth(token) {
-      localStorage.setItem('jwt', token);
-      document.getElementById('auth').style.display = 'none';
-      document.getElementById('account').style.display = 'block';
-    }
+  <!-- AUTH (centered overlay card) -->
+  <section id="auth" class="card auth-card">
+    <h1 class="brand">Ultra Wallet</h1>
+    <p class="subtitle">Sign in or create a new account</p>
 
-    async function register() {
-      const u = document.getElementById('username').value;
-      const p = document.getElementById('password').value;
-      const r = await fetch(API_BASE + '/auth/register', { method:'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ username:u, password:p })});
-      const j = await r.json();
-      document.getElementById('authResult').innerText = JSON.stringify(j);
-    }
+    <input id="username" placeholder="Username" />
+    <input id="password" placeholder="Password" type="password" />
 
-    async function login() {
-      const u = document.getElementById('username').value;
-      const p = document.getElementById('password').value;
-      const r = await fetch(API_BASE + '/auth/login', { method:'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ username:u, password:p })});
-      const j = await r.json();
-      if (j.token) {
-        setAuth(j.token);
-      } else {
-        document.getElementById('authResult').innerText = JSON.stringify(j);
-      }
-    }
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn primary" onclick="login()">Login</button>
+      <button class="btn secondary" onclick="register()">Register</button>
+    </div>
+    <div id="authResult" class="small-text" style="margin-top:10px"></div>
+  </section>
 
-    async function topup() {
-      const a = Number(document.getElementById('topupAmount').value);
-      const token = localStorage.getItem('jwt');
-      const r = await fetch(API_BASE + '/wallet/topup', { method:'POST', headers: {'content-type':'application/json', 'authorization':'Bearer ' + token}, body: JSON.stringify({ amount: a }) });
-      const j = await r.json();
-      document.getElementById('accountInfo').innerText = JSON.stringify(j);
-    }
+  <!-- HOME -->
+  <section id="homeScreen" class="screen active">
+    <div class="container">
+      <div class="balance-wrap">
+        <div class="card-balance glass">
+          <div class="balance-left">
+            <div class="label">Available Balance</div>
+            <div id="accountInfo" class="balance-amount">₱0.00</div>
+            <div class="action-row">
+              <button class="btn small secondary" onclick="navTo('topupScreen')">Top-up</button>
+              <button class="btn small" onclick="navTo('historySection')">History</button>
+            </div>
+          </div>
+          <div class="balance-right">
+            <canvas id="miniChart" width="220" height="80"></canvas>
+          </div>
+          <div class="wave-deco"></div>
+        </div>
+      </div>
 
-    async function transfer() {
-      const to = Number(document.getElementById('toAccount').value);
-      const amt = Number(document.getElementById('transferAmount').value);
-      const token = localStorage.getItem('jwt');
-      const r = await fetch(API_BASE + '/wallet/transfer', { method:'POST', headers: {'content-type':'application/json', 'authorization':'Bearer ' + token}, body: JSON.stringify({ to_account_id: to, amount: amt }) });
-      const j = await r.json();
-      document.getElementById('accountInfo').innerText = JSON.stringify(j);
-    }
+      <div class="quick-actions">
+        <button class="qa" onclick="navTo('sendScreen')">💸 Send</button>
+        <button class="qa" onclick="navTo('topupScreen')">➕ Top-up</button>
+        <button class="qa" onclick="navTo('historySection')">📜 Ledger</button>
+      </div>
 
-    async function loadLedger() {
-      const token = localStorage.getItem('jwt');
-      const r = await fetch(API_BASE + '/wallet/ledger', { headers: { authorization: 'Bearer ' + token } });
-      const j = await r.json();
-      document.getElementById('ledger').innerText = JSON.stringify(j, null, 2);
-    }
-  </script>
+      <div class="cards-grid">
+        <div class="card glass small">
+          <h4>Weekly Top-ups</h4>
+          <div class="stat">₱120.00</div>
+        </div>
+        <div class="card glass small">
+          <h4>Spent this week</h4>
+          <div class="stat">₱34.50</div>
+        </div>
+        <div class="card glass small">
+          <h4>Rewards</h4>
+          <div class="stat">120 points</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+ <section id="topupScreen" class="screen">
+  <div class="form-wrapper">
+    <div class="form-card">
+      
+      <h2>💰 Top-up</h2>
+      <p class="form-sub">Add money to your wallet</p>
+
+      <label class="form-label">Amount (PHP)</label>
+      <div class="peso-input">
+        <span class="peso-symbol">₱</span>
+        <input id="topupAmount" class="clean-input" type="number" placeholder="0.00" />
+      </div>
+
+      <button class="btn primary wide" onclick="topup()">Add Funds</button>
+    </div>
+  </div>
+</section>
+
+<!-- Send money card -->
+<section id="sendScreen" class="screen">
+  <div class="container form-wrapper">
+    <div class="form-card animate-pop">
+      <div class="card-header">
+        <span class="card-icon">🔁</span>
+        <h2>Send money</h2>
+        <small class="card-sub">Transfer to another account</small>
+      </div>
+
+      <label class="field-label">To Account ID</label>
+      <input id="toAccount" type="number" placeholder="Account ID" />
+
+      <label class="field-label">Amount (PHP)</label>
+      <div class="input-with-prefix">
+        <span class="prefix">₱</span>
+        <input id="transferPesos" type="number" step="0.01" min="0" placeholder="0.00" />
+      </div>
+
+      <!-- Required by original JS -->
+      <input id="transferAmount" type="hidden" />
+
+      <button class="btn danger wide" onclick="transferPesos()">Send Money</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- Merchant purchase card -->
+<section id="merchantScreen" class="screen">
+  <div class="container form-wrapper">
+    <div class="form-card animate-pop">
+      <div class="card-header">
+        <span class="card-icon">🛒</span>
+        <h2>Buy from Merchant</h2>
+        <small class="card-sub">Pay merchants directly</small>
+      </div>
+
+      <label class="field-label">Merchant Account ID</label>
+      <input id="merchantId" type="number" placeholder="Merchant ID" />
+
+      <label class="field-label">Amount (PHP)</label>
+      <div class="input-with-prefix">
+        <span class="prefix">₱</span>
+        <input id="purchasePesos" type="number" step="0.01" min="0" placeholder="0.00" />
+      </div>
+
+      <!-- Required by original JS -->
+      <input id="purchaseAmount" type="hidden" />
+
+      <button class="btn warning wide" onclick="purchasePesos()">Pay Merchant</button>
+    </div>
+  </div>
+</section>
+
+
+
+
+  <!-- History / Ledger -->
+  <section id="historySection" class="screen">
+    <div class="container">
+      <div class="section controls">
+        <div class="left">
+          <h3>Transaction History</h3>
+        </div>
+        <div class="right">
+          <button class="small-btn" onclick="initLedger()">Refresh</button>
+          <button class="small-btn" onclick="exportCSV()">CSV</button>
+          <button class="small-btn" onclick="exportPDF()">PDF</button>
+          <button class="small-btn" id="autoRefreshToggle" onclick="toggleAutoRefresh()">AutoRefresh: Off</button>
+        </div>
+      </div>
+
+      <div id="ledgerScroll" class="ledger-scroll">
+        <div id="ledgerList"></div>
+        <div id="ledgerSentinel"></div>
+      </div>
+    </div>
+  </section>
+
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+
+<script src="app.js"></script>
 </body>
 </html>

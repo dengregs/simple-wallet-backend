@@ -1,60 +1,62 @@
--- Minimal schema: users, accounts, transactions, ledger_entries
-CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+-- ============================
+-- DATABASE SCHEMA (STRUCTURE)
+-- High-Concurrency Wallet/Ledger
+-- ============================
+
+-- 1) USERS
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE accounts (
-  id SERIAL PRIMARY KEY,
-  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  balance BIGINT NOT NULL DEFAULT 0, -- cents
-  currency TEXT NOT NULL DEFAULT 'PHP',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+-- 2) ACCOUNTS
+CREATE TABLE IF NOT EXISTS accounts (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),
+    currency TEXT NOT NULL DEFAULT 'PHP',
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE transactions (
-  id SERIAL PRIMARY KEY,
-  reference TEXT UNIQUE NOT NULL,
-  description TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+CREATE INDEX idx_accounts_user ON accounts(user_id);
+
+-- OPTIONAL: versioning for optimistic concurrency
+CREATE TABLE IF NOT EXISTS account_versions (
+    account_id INT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    version BIGINT NOT NULL DEFAULT 0,
+    last_updated TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE ledger_entries (
-  id SERIAL PRIMARY KEY,
-  transaction_id INT REFERENCES transactions(id) ON DELETE CASCADE,
-  account_id INT REFERENCES accounts(id) ON DELETE CASCADE,
-  amount BIGINT NOT NULL, -- positive credit, negative debit
-  balance_after BIGINT NOT NULL,
-  metadata JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+-- 3) TRANSACTIONS (transaction header)
+CREATE TABLE IF NOT EXISTS transactions (
+    id SERIAL PRIMARY KEY,
+    tx_type TEXT NOT NULL,
+    reference TEXT UNIQUE NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Trigger: prevent negative balance on insert of ledger_entries
-CREATE OR REPLACE FUNCTION prevent_negative_balance() RETURNS trigger AS $$
-BEGIN
-  IF (NEW.balance_after < 0) THEN
-    RAISE EXCEPTION 'negative balance not allowed for account %', NEW.account_id;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_prevent_negative BEFORE INSERT ON ledger_entries
-FOR EACH ROW EXECUTE FUNCTION prevent_negative_balance();
-
--- Trigger: audit log example (simple insert into transactions table if missing)
-CREATE OR REPLACE FUNCTION ensure_transaction_exists() RETURNS trigger AS $$
-BEGIN
-  IF NEW.transaction_id IS NULL THEN
-    INSERT INTO transactions (reference, description) VALUES (md5(random()::text || clock_timestamp()::text), 'auto') RETURNING id INTO NEW.transaction_id;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_ensure_tx BEFORE INSERT ON ledger_entries
-FOR EACH ROW EXECUTE FUNCTION ensure_transaction_exists();
+-- 4) LEDGER ENTRIES (double-entry bookkeeping)
+CREATE TABLE IF NOT EXISTS ledger_entries (
+    id SERIAL PRIMARY KEY,
+    transaction_id INT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    account_id INT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    amount BIGINT NOT NULL,                -- +credit / -debit
+    balance_after BIGINT NOT NULL,         -- after applying amount
+    reversed BOOLEAN NOT NULL DEFAULT FALSE,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
 
 CREATE INDEX idx_ledger_account ON ledger_entries(account_id);
+CREATE INDEX idx_ledger_tx ON ledger_entries(transaction_id);
+
+-- 5) AUDIT LOG
+CREATE TABLE IF NOT EXISTS audit_log (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    details JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
