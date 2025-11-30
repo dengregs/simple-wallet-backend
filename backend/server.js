@@ -29,24 +29,25 @@ app.use(bodyParser.json());
 // CORS CONFIG (place here) 🔥
 // ---------------------------------------------------------
 const allowedOrigins = [
-  "http://localhost:5173",                           // local dev
-  "https://simple-wallet-frontend.onrender.com",     // deployed frontend
+  "http://localhost:5173",
+  "https://simple-wallet-frontend.onrender.com",   // YOUR REAL FRONTEND
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // Allow curl, mobile apps, etc
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error("Not allowed by CORS: " + origin));
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   })
 );
+
 // ---------------------------------------------------------
 
 
