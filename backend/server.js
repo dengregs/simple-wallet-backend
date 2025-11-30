@@ -19,15 +19,12 @@ const pool = new Pool({
   }
 });
 
-
-
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
 const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
-
 
 // ======================================================
 // OPTIONAL ROUTER — if you later add routes/auth.js
@@ -45,7 +42,6 @@ try {
 // ======================================================
 // AUTH MIDDLEWARE
 // ======================================================
-// 🔐 AUTH MIDDLEWARE
 function authMiddleware(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ error: 'No token' });
@@ -53,13 +49,12 @@ function authMiddleware(req, res, next) {
   const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Invalid token' });
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ error: 'Token not valid' });
     req.user = user;
     next();
   });
 }
-
 
 // ======================================================
 // INLINE AUTH ROUTES (used if routes/auth.js is missing)
@@ -115,8 +110,6 @@ app.post("/auth/register", async (req, res) => {
   }
 });
 
-
-
 // LOGIN
 app.post("/auth/login", async (req, res) => {
   const { username, password } = req.body;
@@ -144,10 +137,10 @@ app.post("/auth/login", async (req, res) => {
 // ======================================================
 app.get('/me/account', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.user_id; // FIXED KEY
+    const userId = req.user.user_id;
 
     const result = await pool.query(
-      'SELECT id, username, balance FROM accounts JOIN users ON users.id = accounts.user_id WHERE users.id = $1',
+      'SELECT accounts.id AS account_id, users.username, accounts.balance FROM accounts JOIN users ON users.id = accounts.user_id WHERE users.id = $1',
       [userId]
     );
 
@@ -161,7 +154,6 @@ app.get('/me/account', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-
 
 // ======================================================
 // TOP-UP
@@ -188,11 +180,12 @@ app.post("/wallet/topup", authMiddleware, async (req, res) => {
     const newBalance = BigInt(acc.rows[0].balance) + BigInt(amount);
 
     const ref = uuidv4();
+    // include tx_type to satisfy NOT NULL constraint
     const tx = await client.query(
-      `INSERT INTO transactions (reference, description)
-       VALUES ($1,$2)
+      `INSERT INTO transactions (tx_type, reference, description)
+       VALUES ($1,$2,$3)
        RETURNING id`,
-      [ref, "topup"]
+      ["topup", ref, "topup"]
     );
 
     const txid = tx.rows[0].id;
@@ -235,8 +228,9 @@ app.post("/wallet/transfer", authMiddleware, async (req, res) => {
   try {
     await client.query("BEGIN");
 
+    // corrected FOR UPDATE
     const src = await client.query(
-      "SELECT id, balance FROM accounts WHERE user_id=$1 FOR_UPDATE",
+      "SELECT id, balance FROM accounts WHERE user_id=$1 FOR UPDATE",
       [req.user.user_id]
     );
 
@@ -264,11 +258,12 @@ app.post("/wallet/transfer", authMiddleware, async (req, res) => {
     const newTo = BigInt(toRow.balance) + BigInt(amount);
 
     const ref = uuidv4();
+    // include tx_type column
     const tx = await client.query(
-      `INSERT INTO transactions (reference, description)
-       VALUES ($1,$2)
+      `INSERT INTO transactions (tx_type, reference, description)
+       VALUES ($1,$2,$3)
        RETURNING id`,
-      [ref, "transfer"]
+      ["transfer", ref, "transfer"]
     );
 
     const txid = tx.rows[0].id;
@@ -348,11 +343,13 @@ app.post("/wallet/purchase", authMiddleware, async (req, res) => {
     const newBuyerBal = BigInt(buyerAcc.balance) - BigInt(amount);
     const newMerchBal = BigInt(merchAcc.balance) + BigInt(amount);
 
+    const ref = uuidv4();
+    // include tx_type and correct ref/description
     const tx = await client.query(
-      `INSERT INTO transactions (reference, description)
-       VALUES ($1,$2)
+      `INSERT INTO transactions (tx_type, reference, description)
+       VALUES ($1,$2,$3)
        RETURNING id`,
-      [uuidv4(), "purchase"]
+      ["purchase", ref, "purchase"]
     );
 
     const txid = tx.rows[0].id;
@@ -425,6 +422,11 @@ app.get("/wallet/ledger", authMiddleware, async (req, res) => {
 
 app.get("/", (req, res) => {
   res.send("Simple Wallet Backend is running 🎉");
+});
+
+// quick health check (keeps external probes happy)
+app.get("/health", (req, res) => {
+  res.json({ ok: true, version: "simple-wallet-backend", uptime: process.uptime() });
 });
 
 app.listen(PORT, () => console.log("Server listening on", PORT));
