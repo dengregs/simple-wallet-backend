@@ -79,5 +79,14 @@ FOR EACH ROW
 EXECUTE FUNCTION fn_prevent_ledger_delete();
 
 -- 5) Ensure accounts.balance >= 0 (redundant safety)
-ALTER TABLE accounts
-ADD CONSTRAINT IF NOT EXISTS chk_balance_nonnegative CHECK (balance >= 0);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_balance_nonnegative'
+    ) THEN
+        ALTER TABLE accounts
+        ADD CONSTRAINT chk_balance_nonnegative CHECK (balance >= 0);
+    END IF;
+END$$;

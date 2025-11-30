@@ -28,6 +28,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
+
 // ======================================================
 // OPTIONAL ROUTER — if you later add routes/auth.js
 // ======================================================
@@ -44,20 +45,21 @@ try {
 // ======================================================
 // AUTH MIDDLEWARE
 // ======================================================
+// 🔐 AUTH MIDDLEWARE
 function authMiddleware(req, res, next) {
-  const h = req.headers.authorization;
-  if (!h) return res.status(401).json({ error: "missing auth" });
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return res.status(401).json({ error: 'No token' });
 
-  const token = h.replace("Bearer ", "").trim();
+  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Invalid token' });
 
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload;
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Token not valid' });
+    req.user = user;
     next();
-  } catch (err) {
-    return res.status(401).json({ error: "invalid token" });
-  }
+  });
 }
+
 
 // ======================================================
 // INLINE AUTH ROUTES (used if routes/auth.js is missing)
@@ -77,15 +79,18 @@ app.post("/auth/register", async (req, res) => {
 
     const r = await client.query(
       `INSERT INTO users (username, password_hash)
-       VALUES ($1,$2)
-       ON CONFLICT ON CONSTRAINT users_username_unique DO NOTHING
+       VALUES ($1, $2)
+       ON CONFLICT (username) DO NOTHING
        RETURNING id`,
       [username, hash]
     );
 
     let userId;
     if (r.rowCount === 0) {
-      const existing = await client.query("SELECT id FROM users WHERE username=$1", [username]);
+      const existing = await client.query(
+        "SELECT id FROM users WHERE username=$1",
+        [username]
+      );
       userId = existing.rows[0].id;
     } else {
       userId = r.rows[0].id;
@@ -94,7 +99,7 @@ app.post("/auth/register", async (req, res) => {
     await client.query(
       `INSERT INTO accounts (user_id, balance)
        VALUES ($1, $2)
-       ON CONFLICT ON CONSTRAINT accounts_user_id_key DO NOTHING`,
+       ON CONFLICT (user_id) DO NOTHING`,
       [userId, 0]
     );
 
@@ -109,6 +114,8 @@ app.post("/auth/register", async (req, res) => {
     client.release();
   }
 });
+
+
 
 // LOGIN
 app.post("/auth/login", async (req, res) => {
@@ -135,17 +142,26 @@ app.post("/auth/login", async (req, res) => {
 // ======================================================
 // GET ACCOUNT
 // ======================================================
-app.get("/me/account", authMiddleware, async (req, res) => {
-  const r = await pool.query(
-    "SELECT id, balance FROM accounts WHERE user_id=$1",
-    [req.user.user_id]
-  );
+app.get('/me/account', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id; // FIXED KEY
 
-  if (r.rowCount === 0)
-    return res.status(404).json({ error: "account not found" });
+    const result = await pool.query(
+      'SELECT id, username, balance FROM accounts JOIN users ON users.id = accounts.user_id WHERE users.id = $1',
+      [userId]
+    );
 
-  res.json(r.rows[0]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
+
 
 // ======================================================
 // TOP-UP
@@ -407,7 +423,8 @@ app.get("/wallet/ledger", authMiddleware, async (req, res) => {
   res.json(r.rows);
 });
 
-// ======================================================
-// START SERVER
-// ======================================================
+app.get("/", (req, res) => {
+  res.send("Simple Wallet Backend is running 🎉");
+});
+
 app.listen(PORT, () => console.log("Server listening on", PORT));
