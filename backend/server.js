@@ -24,7 +24,32 @@ const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(bodyParser.json());
-app.use(cors());
+
+// ---------------------------------------------------------
+// CORS CONFIG (place here) 🔥
+// ---------------------------------------------------------
+const allowedOrigins = [
+  "http://localhost:5173",                           // local dev
+  "https://simple-wallet-frontend.onrender.com",     // deployed frontend
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // Allow curl, mobile apps, etc
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS: " + origin));
+    },
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  })
+);
+// ---------------------------------------------------------
+
+
 
 // ======================================================
 // OPTIONAL ROUTER — if you later add routes/auth.js
