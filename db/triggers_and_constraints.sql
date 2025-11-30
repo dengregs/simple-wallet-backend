@@ -9,8 +9,11 @@ BEGIN
     INSERT INTO accounts (user_id, balance)
         VALUES (NEW.id, 0)
         ON CONFLICT DO NOTHING;
-    INSERT INTO account_versions (account_id) VALUES (currval('accounts_id_seq'))
-        ON CONFLICT DO NOTHING;
+
+    INSERT INTO account_versions (account_id)
+    VALUES (currval('accounts_id_seq'))
+    ON CONFLICT DO NOTHING;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -20,6 +23,7 @@ CREATE TRIGGER trg_create_account_after_user
 AFTER INSERT ON users
 FOR EACH ROW
 EXECUTE FUNCTION fn_create_account_after_user();
+
 
 -- 2) Prevent negative balance at ledger-entry level
 CREATE OR REPLACE FUNCTION fn_prevent_negative_balance()
@@ -37,6 +41,7 @@ CREATE TRIGGER trg_prevent_negative
 BEFORE INSERT ON ledger_entries
 FOR EACH ROW
 EXECUTE FUNCTION fn_prevent_negative_balance();
+
 
 -- 3) Audit ledger entry inserts
 CREATE OR REPLACE FUNCTION fn_audit_ledger_insert()
@@ -64,6 +69,7 @@ AFTER INSERT ON ledger_entries
 FOR EACH ROW
 EXECUTE FUNCTION fn_audit_ledger_insert();
 
+
 -- 4) Prevent deletion of ledger entries (ledger is immutable)
 CREATE OR REPLACE FUNCTION fn_prevent_ledger_delete()
 RETURNS TRIGGER AS $$
@@ -78,6 +84,7 @@ BEFORE DELETE ON ledger_entries
 FOR EACH ROW
 EXECUTE FUNCTION fn_prevent_ledger_delete();
 
+
 -- 5) Ensure accounts.balance >= 0 (redundant safety)
 DO $$
 BEGIN
@@ -90,3 +97,35 @@ BEGIN
         ADD CONSTRAINT chk_balance_nonnegative CHECK (balance >= 0);
     END IF;
 END$$;
+
+
+-- ===================================================================
+-- 6) TRIGGER: Ensure each transaction is perfectly balanced (SUM = 0)
+-- ===================================================================
+
+CREATE OR REPLACE FUNCTION fn_check_transaction_balance()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    total NUMERIC;
+BEGIN
+    SELECT COALESCE(SUM(amount), 0)
+    INTO total
+    FROM ledger_entries
+    WHERE transaction_id = NEW.transaction_id;
+
+    IF total <> 0 THEN
+        RAISE EXCEPTION 'Ledger for transaction % is unbalanced (SUM = %)',
+            NEW.transaction_id, total;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_check_balance ON ledger_entries;
+CREATE TRIGGER trg_check_balance
+AFTER INSERT OR UPDATE ON ledger_entries
+FOR EACH ROW
+EXECUTE FUNCTION fn_check_transaction_balance();

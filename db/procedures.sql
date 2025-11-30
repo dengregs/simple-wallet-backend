@@ -184,3 +184,46 @@ BEGIN
     UPDATE account_versions SET version = version + 1 WHERE account_id IN (p_merchant_account, p_user_account);
 END;
 $$ LANGUAGE plpgsql;
+-- ===================================================================
+-- REVERSE TRANSACTION PROCEDURE
+-- ===================================================================
+
+CREATE OR REPLACE PROCEDURE sp_reverse_transaction(p_transaction_id INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    original_type TEXT;
+    original_description TEXT;
+    new_transaction_id INT;
+    rec RECORD;
+BEGIN
+    -- Get original transaction
+    SELECT type, description 
+    INTO original_type, original_description
+    FROM transactions
+    WHERE transaction_id = p_transaction_id;
+
+    IF original_type IS NULL THEN
+        RAISE EXCEPTION 'Transaction % does not exist', p_transaction_id;
+    END IF;
+
+    -- Create a new "REVERSAL" transaction
+    INSERT INTO transactions (type, description)
+    VALUES ('REVERSAL', 'Reversal of transaction ' || p_transaction_id)
+    RETURNING transaction_id INTO new_transaction_id;
+
+    -- Create opposite ledger rows
+    FOR rec IN 
+        SELECT account_id, amount 
+        FROM ledger_entries 
+        WHERE transaction_id = p_transaction_id
+    LOOP
+        INSERT INTO ledger_entries (transaction_id, account_id, amount)
+        VALUES (new_transaction_id, rec.account_id, rec.amount * -1);
+    END LOOP;
+
+    RAISE NOTICE 'Transaction % successfully reversed (new transaction: %)',
+        p_transaction_id, new_transaction_id;
+
+END;
+$$;
