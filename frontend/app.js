@@ -5,7 +5,7 @@
 
 /* ---------- DOM helpers ---------- */
 const $ = id => document.getElementById(id);
-const API_BASE = "https://simple-wallet-backend-onpl.onrender.com";
+const API_BASE = "https://simple-wallet-backend-moa6.onrender.com";
 const RENDER_CHUNK = 12;
 let ledgerData = [];
 let renderQueue = [];

@@ -1,7 +1,5 @@
 # Node modules
 node_modules/
-npm-debug.log
-yarn-error.log
 
 # Environment
 .env
@@ -10,9 +8,14 @@ yarn-error.log
 .env.production
 
 # Logs
-logs
+npm-debug.log
+yarn-error.log
+logs/
 *.log
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# Package lock (optional)
+package-lock.json
