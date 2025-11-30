@@ -5,7 +5,7 @@ require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
 const bodyParser = require("body-parser");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 const { v4: uuidv4 } = require("uuid");
