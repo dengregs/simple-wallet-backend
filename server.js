@@ -27,13 +27,21 @@ const app = express();
 app.use(bodyParser.json());
 
 // CORS - allow your frontend hostname (change if needed)
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://simple-wallet-frontend.onrender.com";
-app.use(cors({
-  origin: FRONTEND_ORIGIN,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  credentials: true
-}));
-app.options("*", cors());
+// --- CORS FIX (Render-compatible) ---
+const FRONTEND_ORIGIN = "https://simple-wallet-frontend.onrender.com";
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", FRONTEND_ORIGIN);
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+});
+
 
 // --- auth middleware (single)
 function authMiddleware(req, res, next) {
