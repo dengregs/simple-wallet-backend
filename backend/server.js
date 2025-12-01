@@ -1,17 +1,5 @@
 // Simple Wallet Backend (school project friendly)
 // Run: NODE_ENV=development node server.js
-// Ignore Chrome extension injected errors
-window.addEventListener("error", (e) => {
-  const msg = e.message || "";
-  if (
-    msg.includes("site_integration") ||
-    msg.includes("writing") ||
-    msg.includes("generate")
-  ) {
-    e.stopImmediatePropagation();
-    return false;
-  }
-});
 
 require("dotenv").config();
 const cors = require("cors");
