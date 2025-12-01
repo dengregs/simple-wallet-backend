@@ -1,11 +1,20 @@
-/* ======================================================
-   app.js — GCash Ultra UI (FINAL FULL VERSION)
-   With Authentication Protection + Fixed Navigation
-   ====================================================== */
 
-/* ---------- DOM helpers ---------- */
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = (e.reason?.message || "") + (e.reason?.stack || "");
+
+  if (
+    msg.includes("site_integration") ||
+    msg.includes("writing") ||
+    msg.includes("generate")
+  ) {
+    e.preventDefault();
+    return false;
+  }
+});
+
+
 const $ = id => document.getElementById(id);
-const API_BASE = "https://simple-wallet-backend-moa6.onrender.com";
+const API_BASE = "https://simple-wallet-backend-mo36.onrender.com";
 const RENDER_CHUNK = 12;
 let ledgerData = [];
 let renderQueue = [];
@@ -132,34 +141,38 @@ async function register() {
 
 
 async function login() {
-  showLoader(true);
   try {
-    const username = $("username").value;
-    const password = $("password").value;
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
 
-    const r = await fetch(`${API_BASE}/auth/login`, {
+    if (!username || !password) {
+      showErrorPopup("Missing username or password");
+      return;
+    }
+
+   const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })
     });
 
-    const j = await r.json();
-    showLoader(false);
-
-    if (r.ok && j.token) {
-      localStorage.setItem("jwt", j.token);
-      navTo("homeScreen");
-      updateBalance();
-      initLedger();
-      showToast("Welcome back!", "success");
-    } else {
-      showErrorPopup(j.error || "Login failed");
+    if (!res.ok) {
+      showErrorPopup("Invalid login");
+      return;
     }
-  } catch (e) {
-    showLoader(false);
-    showErrorPopup("Login network error");
+
+    const data = await res.json();
+    localStorage.setItem("jwt", data.token);
+
+    navTo("homeScreen");
+    initAccount();
+  } catch (err) {
+    console.error(err);
+    showErrorPopup("Network error");
   }
 }
+
+
 
 
 
@@ -359,9 +372,6 @@ async function purchasePesos() {
     showErrorPopup("Purchase network error");
   }
 }
-
-
-
 
 /* ---------- Ledger Grouping & Rendering ---------- */
 function safeParseMeta(m) {
