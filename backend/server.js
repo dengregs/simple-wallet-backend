@@ -329,6 +329,3 @@ app.get("/wallet/ledger", authMiddleware, async (req, res) => {
 // root + health
 app.get("/", (req, res) => res.send("Simple Wallet Backend is running 🎉"));
 app.get("/health", (req, res) => res.json({ ok: true, uptime: process.uptime() }));
-
-// single app.listen
-app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
